@@ -272,6 +272,12 @@ O comando usa a configuração local, executa os oito turnos dos quatro cenário
 
 Com mais tempo: comparar modelos, medir qualidade e latência em cenários representativos, ampliar recuperação e avaliação e implementar identificação adequada para consultas de pedidos.
 
+## Histórico de desenvolvimento
+
+O projeto foi construído em entregas incrementais. O primeiro commit, com a estrutura inicial e a integração local com Ollama, foi feito na branch `main`. **As etapas seguintes foram desenvolvidas na branch `dev`, em vários commits separados**: catálogo SQLite e testes, regra de venda do saldo descontinuado, ferramentas de atendimento, políticas da loja, conversas reais e revisão da entrega.
+
+O [histórico da branch `dev`](https://github.com/crxZZZZ/chatbot_artefact/commits/dev) registra essa evolução. Para avaliar o progresso, consulte os commits dessa branch; eles preservam as etapas de implementação e correção, conforme solicitado no desafio.
+
 ## Uso de IA
 
 Foi utilizado **Codex** para análise das fontes, discussão de alternativas, implementação e auxílio na validação. As escolhas de execução local gratuita, Streamlit, SDK direto, SQLite e desenvolvimento em entregas incrementais foram discutidas com a pessoa candidata. A pessoa candidata acompanha as decisões e revisa as entregas; os commits são feitos por ela ou pelo Codex sob sua autorização.
