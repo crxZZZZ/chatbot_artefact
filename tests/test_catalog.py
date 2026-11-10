@@ -66,8 +66,8 @@ class CatalogTests(unittest.TestCase):
             self.assertIsNone(self.catalog.get_product(81))
             self.assertEqual(self.catalog.get_product(82).name, "Yamaha C70 Nylon Natural")
 
-    def test_only_active_products_with_positive_stock_are_available(self):
-        for product_id in (96, 113, 130, 136):
+    def test_unreleased_or_out_of_stock_products_are_unavailable(self):
+        for product_id in (96, 113, 130):
             with self.subTest(product_id=product_id):
                 product = self.catalog.get_product(product_id)
                 self.assertFalse(product.available)
@@ -76,8 +76,24 @@ class CatalogTests(unittest.TestCase):
                     self.catalog.search_products(product.name, available_only=False)[0].product_id,
                     product_id,
                 )
-        self.assertEqual(self.catalog.get_product(136).stock_quantity, 13)
         self.assertTrue(self.catalog.get_product(81).available)
+
+    def test_discontinued_product_is_available_until_stock_runs_out(self):
+        product = self.catalog.get_product(136)
+        self.assertEqual(product.status, "discontinued")
+        self.assertEqual(product.stock_quantity, 13)
+        self.assertTrue(product.available)
+        self.assertEqual(
+            [p.product_id for p in self.catalog.search_products(product.name)], [136],
+        )
+
+        self.update_product(136, stock_quantity="0")
+        import_catalog(self.source, self.database)
+        self.assertFalse(self.catalog.get_product(136).available)
+        self.assertEqual(self.catalog.search_products(product.name), [])
+        self.assertEqual(
+            self.catalog.search_products(product.name, available_only=False)[0].product_id, 136,
+        )
 
     def test_active_promotions_have_expected_prices(self):
         expected = {90: (18, 196718), 94: (8, 551908), 121: (20, 43920), 127: (10, 32310)}

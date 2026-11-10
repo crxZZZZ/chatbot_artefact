@@ -97,7 +97,7 @@ product = catalog.get_product(121)
 print(product.name, product.effective_price_brl)  # Ohana CK-20 Concert Natural, 439.20
 ```
 
-- **Disponibilidade:** apenas `status=active` com estoque positivo. Lançamentos e descontinuados não aparecem na busca padrão, mesmo com estoque. `get_product()` também retorna indisponíveis para permitir explicar seu status; `available_only=False` permite incluí-los nas buscas.
+- **Disponibilidade:** produtos com status `active` ou `discontinued` e estoque positivo aparecem na busca padrão. Interpretamos a descontinuação como saída de linha, permitindo vender o saldo existente; o status é preservado para informar essa condição sem prometer reposição. Produtos sem estoque e lançamentos (`coming_soon`) permanecem indisponíveis. `get_product()` também retorna indisponíveis para permitir explicar seu status; `available_only=False` permite incluí-los nas buscas.
 - **Busca textual:** todos os termos devem aparecer no conjunto nome, descrição e categoria, desconsiderando acentos e maiúsculas. Não há expansão de sinônimos nem busca semântica. Os parâmetros são separados do SQL; caracteres como `%` são tratados literalmente.
 - **Preços:** valores de origem são convertidos com `Decimal` e armazenados como centavos inteiros. O desconto percentual usa aritmética inteira, com arredondamento de meio centavo para cima. As propriedades em reais retornam `Decimal`.
 - **Promoções:** somente `is_active=1` afeta o preço. Promoções inativas são preservadas na base. Mais de uma promoção ativa para o mesmo produto impede a importação, evitando escolher ou acumular descontos sem uma regra definida. A fonte atual não apresenta esse conflito.
@@ -157,7 +157,7 @@ O manual também contém ambiguidades que precisarão de interpretação documen
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-A suíte contém 23 testes, cobrindo importação do snapshot, reimportação, integridade referencial, rollback, disponibilidade, promoções, arredondamento, limite de orçamento, busca textual, consultas parametrizadas e leitura sem escrita. Os testes usam bancos e variações dos CSVs em diretórios temporários; não modificam as fontes versionadas nem exigem LLM.
+A suíte contém 24 testes, cobrindo importação do snapshot, reimportação, integridade referencial, rollback, disponibilidade (incluindo venda do saldo de descontinuados), promoções, arredondamento, limite de orçamento, busca textual, consultas parametrizadas e leitura sem escrita. Os testes usam bancos e variações dos CSVs em diretórios temporários; não modificam as fontes versionadas nem exigem LLM.
 
 O comando `python -m emporio.check_ollama` verifica separadamente a integração real com o modelo: frase em português, chamada `somar(17, 25)`, execução Python e uso do resultado `42` na resposta final. Ele não avalia a qualidade comercial do agente nem a seleção entre ferramentas de atendimento.
 

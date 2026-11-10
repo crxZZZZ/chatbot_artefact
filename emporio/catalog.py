@@ -36,7 +36,7 @@ class Product:
 
     @property
     def available(self) -> bool:
-        return self.status == "active" and self.stock_quantity > 0
+        return self.status in {"active", "discontinued"} and self.stock_quantity > 0
 
     @property
     def price_brl(self) -> Decimal:
@@ -105,7 +105,7 @@ class Catalog:
         max_cents = brl_to_cents(max_price_brl) if max_price_brl is not None else None
         conditions, parameters = [], []
         if available_only:
-            conditions.append("p.status = 'active' AND p.stock_quantity > 0")
+            conditions.append("p.status IN ('active', 'discontinued') AND p.stock_quantity > 0")
         if category_id is not None:
             conditions.append("p.category_id = ?")
             parameters.append(category_id)
