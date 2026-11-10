@@ -170,12 +170,30 @@ class PolicyAgentTests(unittest.TestCase):
         first = ChatAgent(FakeService(
             response("Foi uma compra online e quando você recebeu?"),
         )).reply([{"role": "user", "content": "Quero devolver a compra."}])
-        agent = ChatAgent(FakeService(
-            response("Pelo prazo informado, pode solicitar dentro da janela de sete dias, sujeito às condições do manual."),
-        ))
-        reply = agent.reply([*first.history, {"role": "user", "content": "Foi online e recebi há cinco dias."}])
-        self.assertEqual(reply.consultations[0].arguments["topico"], "trocas_devolucoes")
-        self.assertEqual(reply.consultations[0].origin, "roteamento")
+        for clarification in (
+            "Foi online e recebi há cinco dias.",
+            "Foi online, recebi há cinco dias. Está sem uso e na embalagem original, com todos os manuais e acessórios.",
+        ):
+            with self.subTest(clarification=clarification):
+                agent = ChatAgent(FakeService(response(
+                    "Pelo prazo informado, pode solicitar dentro da janela de sete dias, sujeito às condições do manual.",
+                )))
+                reply = agent.reply([*first.history, {"role": "user", "content": clarification}])
+                self.assertEqual(reply.consultations[0].arguments["topico"], "trocas_devolucoes")
+                self.assertEqual(reply.consultations[0].origin, "roteamento")
+
+    def test_return_context_allows_a_new_topic_or_separate_accessory_request(self):
+        first = ChatAgent(FakeService(response("A compra foi online e quando recebeu?"))).reply(
+            [{"role": "user", "content": "Quero devolver a compra."}]
+        )
+        for question, topic in (
+            ("Recebi há cinco dias, mas qual é o horário da loja?", "horarios"),
+            ("Vocês vendem acessórios avulsos?", "atendimento"),
+        ):
+            with self.subTest(question=question):
+                agent = ChatAgent(FakeService(response("Posso orientar conforme o manual.")))
+                reply = agent.reply([*first.history, {"role": "user", "content": question}])
+                self.assertEqual(reply.consultations[0].arguments["topico"], topic)
 
     def test_policy_and_catalog_can_be_consulted_in_same_turn(self):
         with TemporaryDirectory() as directory:
@@ -191,13 +209,15 @@ class PolicyAgentTests(unittest.TestCase):
             self.assertTrue(all(trace.result["ok"] for trace in reply.consultations))
 
     def test_return_authorization_or_shipping_instructions_are_replaced_by_guidance(self):
-        for content in ("A devolução está autorizada.", "Envie o produto amanhã; iniciamos o processo."):
+        for content in ("A devolução está autorizada.", "Envie o produto amanhã; iniciamos o processo.",
+                        "A devolução está permitida."):
             with self.subTest(content=content):
                 reply = ChatAgent(FakeService(response(content))).reply(
                     [{"role": "user", "content": "Quero devolver minha compra."}]
                 )
                 self.assertNotIn("está autorizada", reply.content)
                 self.assertNotIn("Envie o produto", reply.content)
+                self.assertNotIn("está permitida", reply.content)
                 self.assertIn("equipe precisa confirmar", reply.content)
                 self.assertIn("7 (sete) dias corridos", reply.content)
 

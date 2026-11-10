@@ -180,12 +180,14 @@ emporio/
   check_ollama.py          Diagnóstico real do modelo e de ferramenta
   check_agent.py           Cenários de catálogo com o modelo real
   check_policies.py        Cenários de política com o modelo real
+  export_examples.py       Captura reproduzível de quatro conversas reais
   policies.py              Extração, tópicos e orientações do manual
   database.py              Esquema SQLite, conexão e conversão monetária
   import_data.py           Importação e validação dos CSVs
   catalog.py               Consultas e regras do catálogo
 data/raw/                 CSVs de catálogo e PDF de políticas fornecidos no desafio
 tests/                    Testes de dados, políticas, agente e interface
+exemplos/                 Quatro transcrições de atendimento com o agente real
 ```
 
 Os CSVs em `data/raw/` e `politicas_da_loja.pdf` são cópias dos arquivos fornecidos, com os nomes simplificados e o conteúdo original preservado. Não são carregados dados de clientes ou pedidos nesta entrega.
@@ -224,9 +226,30 @@ Com o banco preparado e o Ollama em execução, rode os cenários comerciais:
 
 O primeiro comando exercita catálogo, continuidade, escopo e horário consultado no manual. O segundo verifica endereço, contatos divergentes, frete indefinido no limite, devolução em dois turnos e combinação de política com promoção de um produto. Ambos imprimem respostas e chamadas e retornam código 1 se uma condição verificada falhar. Os valores esperados correspondem às fontes incluídas. A avaliação verifica condições específicas; não substitui revisão qualitativa nem garante que todas as afirmações estejam corretas em outras conversas.
 
+## Conversas de exemplo
+
+As quatro transcrições foram capturadas com `qwen3:4b-instruct`, pelo mesmo `ChatAgent` usado no Streamlit, com os CSVs e o PDF incluídos. Cada conversa começa com histórico independente e preserva as respostas retornadas pelo agente, incluindo suas limitações de redação. A saudação inicial é a mensagem fixa da interface; as demais respostas podem combinar geração do modelo e regras da aplicação. Não são capturas da interface nem respostas escritas manualmente.
+
+| Conversa | O que demonstra |
+| --- | --- |
+| [Catálogo e orçamento](exemplos/01_catalogo_orcamento.md) | Categorias, violões até R$ 1.000 e nova consulta ao produto referido como “o segundo”. |
+| [Promoção e PIX](exemplos/02_promocao_pix.md) | Consulta conjunta ao catálogo e à política: desconto de 20% do Ohana CK-20, preço de R$ 439,20 e proibição de somar PIX. |
+| [Devolução](exemplos/03_devolucao.md) | Esclarecimento sobre compra online e recebimento, consulta renovada e orientação sem autorizar ou registrar a devolução. |
+| [Fora do escopo](exemplos/04_fora_do_escopo.md) | Redirecionamento de pergunta alheia à loja e retomada com horário consultado no manual. |
+
+A revisão confirmou os preços, a referência ao segundo produto, a não cumulatividade do desconto e a recuperação das regras nos cenários capturados. Também identificou uma limitação no primeiro exemplo: a resposta de preço acrescenta especificações não solicitadas e escreve “Peso do braço: Nato”, embora a fonte tenha `neck: Nato` (material do braço, não peso). A transcrição foi preservada; as verificações atuais não detectam esse tipo de erro semântico. Esses exemplos ilustram execuções específicas, não uma garantia de qualidade em todas as conversas.
+
+Para gerar uma nova captura, com o catálogo preparado e o Ollama ativo:
+
+```powershell
+.\.venv\Scripts\python.exe -m emporio.export_examples --output-dir tmp/conversas
+```
+
+O comando usa a configuração local, executa os oito turnos dos quatro cenários e salva os arquivos somente após concluir as conversas. Escolha um diretório que ainda não exista: capturas anteriores não são sobrescritas. As consultas técnicas são impressas apenas no terminal e não entram nas transcrições. A redação pode variar entre execuções; revise os novos arquivos antes de publicá-los. `tmp/` é ignorado pelo Git.
+
 ## Limitações e continuidade
 
-- Consultas a pedidos e exemplos finais de atendimento ainda estão pendentes.
+- Consultas a pedidos individuais e rastreamento não estão implementadas.
 - A recuperação do manual é estruturada por tópicos e seções, com roteamento heurístico. Perguntas ambíguas ou muito diferentes das formas previstas podem exigir esclarecimento ou outra consulta do modelo. Atualizações do documento precisam de revisão.
 - As restrições do prompt e a barreira de preços não garantem ausência de alucinações ou resistência a prompt injection. Associações entre nome e preço, afirmações de estoque, interpretação de características e redação ainda dependem do modelo e precisam de avaliação ampliada.
 - O histórico não tem persistência, truncamento ou resumo automático. Conversas longas podem exceder o contexto do modelo.
@@ -238,4 +261,4 @@ Com mais tempo: comparar modelos, medir qualidade e latência em cenários repre
 
 Foi utilizado **Codex** para análise das fontes, discussão de alternativas, implementação e auxílio na validação. As escolhas de execução local gratuita, Streamlit, SDK direto, SQLite e desenvolvimento em entregas incrementais foram discutidas com a pessoa candidata. As alterações são revisadas e commitadas pela pessoa candidata.
 
-A entrega final deve conter um repositório público com histórico incremental, este README atualizado e entre 3 e 5 conversas de exemplo, incluindo um cenário não trivial. Os exemplos serão produzidos com as ferramentas comerciais funcionando.
+O Codex também auxiliou na definição dos cenários, na captura das conversas com o agente real e na revisão dos resultados contra as fontes. As respostas publicadas nos exemplos não foram reescritas manualmente. O requisito de 3 a 5 conversas é atendido pelos quatro arquivos em `exemplos/`, incluindo a combinação de promoção com política de pagamento e a devolução em múltiplos turnos.

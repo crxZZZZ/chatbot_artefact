@@ -43,6 +43,8 @@ Para arrependimento, pergunte se a compra foi online e quando o cliente RECEBEU 
 Se faltarem esses dados, explique a regra condicional e peça esclarecimento; não autorize
 devolução, não registre solicitação e não invente datas. Ao receber os dados, reconsulte
 trocas_devolucoes e explique o enquadramento sem afirmar autorização definitiva.
+As exceções da seção 4.4 tratam de TROCAS: não as apresente como impedimentos automáticos
+ao arrependimento de compra online. Em dúvida, peça confirmação à equipe.
 Frete de EXATAMENTE R$ 500,00 não está definido: peça confirmação, sem escolher uma taxa.
 Não transforme os 30 dias de troca por defeito no fim de toda a garantia de 90 dias.
 Para contatos divergentes, informe a divergência; não selecione um número ou e-mail como certo.
@@ -110,6 +112,7 @@ POLICY_CUES = (
 MODEL_CODE = re.compile(r"\b[a-z]{1,5}-?\d{1,4}[a-z]?\b", re.IGNORECASE)
 ACTION_CLAIMS = re.compile(
     r"\b(?:devolucao|troca|solicitacao|reembolso)\s+(?:esta |foi |fica |ja foi )?(?:autorizad[ao]|aprovad[ao]|registrad[ao]|encaminhad[ao])\b"
+    r"|\b(?:devolucao|troca)\s+(?:esta|fica)\s+(?:permitida|liberada)\b"
     r"|\b(?:autorizei|aprovei|registrei|encaminhei|reservei|enviei|exclui|iniciamos)\b"
     r"|\b(?:vou|vamos)\s+(?:autorizar|aprovar|registrar|encaminhar|enviar|iniciar)\b"
     r"|\b(?:envie|devolva|despache|mande)\s+(?:o |a |seu |sua )?(?:produto|instrumento|pedido)\b"
@@ -143,9 +146,10 @@ def _required_policy_topic(history: list[dict]) -> str | None:
     if not history or history[-1]["role"] != "user":
         return None
     question = normalize_text(history[-1]["content"])
-    for topic, cues in POLICY_CUES:
-        if any(cue in question for cue in cues):
-            return topic
+    explicit_topic = next((topic for topic, cues in POLICY_CUES
+                           if any(cue in question for cue in cues)), None)
+    if explicit_topic not in {None, "atendimento"}:
+        return explicit_topic
     for message in reversed(history[:-1]):
         if message["role"] == "user":
             break
@@ -155,7 +159,9 @@ def _required_policy_topic(history: list[dict]) -> str | None:
                 cue in question for cue in ("online", "presencial", "recebi", "recebimento", "embalagem", "sem uso", "dias")
             ):
                 return "trocas_devolucoes"
-    return None
+    # Acessórios e embalagem podem ser condições de uma devolução em andamento.
+    # Fora desse contexto, a pergunta continua sendo encaminhada ao atendimento.
+    return explicit_topic
 
 
 def _broad_catalog_question(question: str) -> bool:
