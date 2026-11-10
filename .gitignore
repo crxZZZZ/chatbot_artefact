@@ -12,5 +12,7 @@ logs/
 *.log
 *.gguf
 .ollama/
+data/*.sqlite3
+data/*.sqlite3-*
 .DS_Store
 Thumbs.db
