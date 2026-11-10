@@ -16,7 +16,7 @@ def main() -> None:
     st.set_page_config(page_title="Empório da Música", page_icon="🎸")
     st.title("Empório da Música")
     st.caption("Sua música começa aqui.")
-    st.info("Consulte instrumentos, preços, estoque e promoções. Pedidos e políticas ainda estão em construção.")
+    st.info("Consulte instrumentos, preços, estoque, promoções e políticas da loja. Pedidos individuais ainda não estão integrados.")
 
     if "agent_history" not in st.session_state:
         reset_conversation()

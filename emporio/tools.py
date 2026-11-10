@@ -1,10 +1,11 @@
-"""Ferramentas de leitura do catálogo expostas ao modelo por JSON Schema."""
+"""Ferramentas de consulta ao catálogo e às políticas, com argumentos validados."""
 
 from copy import deepcopy
 import sqlite3
 
 from emporio.catalog import Catalog, Product
 from emporio.database import CatalogError
+from emporio.policies import PolicyError, PolicyStore, TOPICS
 
 
 TOOL_DEFINITIONS = [
@@ -62,6 +63,24 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "consultar_politicas",
+            "description": (
+                "Consulte o manual da loja para horário, endereço/contato, pagamentos, trocas/devoluções, "
+                "frete, regras de promoções, atendimento, garantia e privacidade. "
+                "Use horarios para funcionamento, loja para endereço, contato para telefone/e-mail "
+                "e trocas_devolucoes para arrependimento. "
+                "Não procure essas regras nas categorias ou produtos. Não consulta pedidos individuais. "
+                "Observe as orientações de ambiguidades; não autorize ações nem invente condições."
+            ),
+            "parameters": {
+                "type": "object", "properties": {"topico": {"type": "string", "enum": list(TOPICS)}},
+                "required": ["topico"], "additionalProperties": False,
+            },
+        },
+    },
 ]
 
 
@@ -89,12 +108,14 @@ def product_summary(product: Product) -> dict:
 
 
 class CatalogTools:
-    def __init__(self, catalog: Catalog):
+    def __init__(self, catalog: Catalog, policies: PolicyStore | None = None):
         self.catalog = catalog
+        self.policies = policies if policies is not None else PolicyStore()
         self.handlers = {
             "listar_categorias": self._categories,
             "buscar_produtos": self._search,
             "consultar_produto": self._product,
+            "consultar_politicas": self._policies,
         }
 
     @property
@@ -103,12 +124,18 @@ class CatalogTools:
 
     def execute(self, name: str, arguments: dict) -> dict:
         if name not in self.handlers:
-            return {"ok": False, "erro": "ferramenta_desconhecida", "mensagem": "Use apenas as ferramentas de catálogo fornecidas."}
+            return {"ok": False, "erro": "ferramenta_desconhecida", "mensagem": "Use apenas as ferramentas de consulta fornecidas."}
         try:
             self._validate(name, arguments)
             return {"ok": True, **self.handlers[name](**arguments)}
         except ValueError as exc:
             return {"ok": False, "erro": "argumentos_invalidos", "mensagem": str(exc)}
+        except PolicyError:
+            return {
+                "ok": False, "erro": "politicas_indisponiveis",
+                "mensagem": "Não foi possível consultar o manual. Não confirme regras sem fonte.",
+                "recuperacao": "Verifique data/raw/politicas_da_loja.pdf e a instalação das dependências.",
+            }
         except (CatalogError, sqlite3.Error, OSError):
             return {
                 "ok": False, "erro": "catalogo_indisponivel",
@@ -130,10 +157,15 @@ class CatalogTools:
             spec = properties[key]
             if type(value) is not types[spec["type"]]:
                 raise ValueError(f"{key} deve ter tipo {spec['type']}.")
+            if "enum" in spec and value not in spec["enum"]:
+                raise ValueError(f"{key} deve ser uma das opções: {', '.join(spec['enum'])}.")
             if "minimum" in spec and value < spec["minimum"]:
                 raise ValueError(f"{key} deve ser pelo menos {spec['minimum']}.")
             if "maximum" in spec and value > spec["maximum"]:
                 raise ValueError(f"{key} deve ser no máximo {spec['maximum']}.")
+
+    def _policies(self, topico: str) -> dict:
+        return self.policies.lookup(topico)
 
     def _categories(self) -> dict:
         return {"categorias": [

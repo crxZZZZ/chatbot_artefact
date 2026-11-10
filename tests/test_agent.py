@@ -96,6 +96,17 @@ class CatalogAgentTests(unittest.TestCase):
         self.assertTrue(discontinued["disponivel"])
         self.assertEqual(discontinued["status"], "discontinued")
 
+    def test_discontinued_stock_is_presented_consistently_even_if_model_denies_sale(self):
+        agent, _ = self.agent(
+            response(calls=[("buscar_produtos", {"query": "Ibanez Bass 2X", "available_only": False})]),
+            response("Esse produto saiu de linha e não está mais disponível."),
+        )
+        reply = agent.reply([{"role": "user", "content": "Posso comprar o Ibanez Bass 2X?"}])
+        self.assertIn("13 unidades", reply.content)
+        self.assertIn("disponível para compra", reply.content)
+        self.assertIn("R$ 441,00", reply.content)
+        self.assertIn("Não há promessa de reposição", reply.content)
+
     def test_empty_search_requests_category_clarification(self):
         self.assertEqual(self.tools.execute("buscar_produtos", {})["erro"], "argumentos_invalidos")
 
@@ -179,7 +190,7 @@ class CatalogAgentTests(unittest.TestCase):
     def test_oversized_batch_is_rejected_before_execution(self):
         agent, _ = self.agent(response(calls=[("listar_categorias", {})] * (MAX_TOOL_CALLS + 1)))
         with self.assertRaises(AgentError) as raised:
-            agent.reply([{"role": "user", "content": "Quais categorias?"}])
+            agent.reply([{"role": "user", "content": "Compare os violões disponíveis."}])
         self.assertEqual(raised.exception.consultations, [])
 
     def test_llm_failure_preserves_completed_consultations(self):
@@ -206,8 +217,24 @@ class CatalogAgentTests(unittest.TestCase):
             response(calls=[("listar_categorias", {})], thinking="raciocinio-secreto"),
             response("Temos guitarras e violões. Qual instrumento interessa?", thinking="raciocinio-secreto"),
         )
-        reply = agent.reply([{"role": "user", "content": "Quais produtos?"}])
+        reply = agent.reply([{"role": "user", "content": "Gostaria de um violão."}])
         self.assertNotIn("raciocinio-secreto", str(reply))
+
+    def test_broad_catalog_request_lists_real_categories_without_model_generation(self):
+        agent, service = self.agent()
+        reply = agent.reply([{"role": "user", "content": "Quais produtos vocês têm?"}])
+        self.assertEqual(service.requests, [])
+        self.assertIn("Guitarras", reply.content)
+        self.assertIn("Violões", reply.content)
+        self.assertIn("orçamento", reply.content)
+        self.assertEqual(reply.consultations[0].origin, "roteamento")
+        self.assertEqual(reply.consultations[0].name, "listar_categorias")
+
+    def test_broad_catalog_request_fails_explicitly_when_database_is_missing(self):
+        agent = ChatAgent(FakeService(), Catalog(Path(self.temp.name) / "missing.sqlite3"))
+        with self.assertRaises(AgentError) as raised:
+            agent.reply([{"role": "user", "content": "Quais produtos vocês têm?"}])
+        self.assertEqual(raised.exception.consultations[0].result["erro"], "catalogo_indisponivel")
 
     def test_model_without_tool_support_fails_clearly(self):
         agent = ChatAgent(FakeService(capabilities=()), self.catalog)

@@ -16,7 +16,7 @@ def verify(agent: ChatAgent) -> None:
         result = agent.reply([*(history or []), {"role": "user", "content": question}])
         print(f"Agente: {result.content}", flush=True)
         for trace in result.consultations:
-            print(f"  {trace.name}({trace.arguments}) -> ok={trace.result.get('ok')}", flush=True)
+            print(f"  [{trace.origin}] {trace.name}({trace.arguments}) -> ok={trace.result.get('ok')}", flush=True)
         return result
 
     def require(condition: bool, message: str) -> None:
@@ -68,10 +68,10 @@ def verify(agent: ChatAgent) -> None:
     require(not outside.consultations, "Pergunta fora de escopo disparou consulta ao catálogo.")
     print("[OK] Redirecionamento de pergunta fora do escopo.", flush=True)
 
-    unavailable_policy = ask("Qual o horário de funcionamento da loja?")
-    require(not any(value in unavailable_policy.content for value in ("09:00", "18:00", "9h", "18h")), "Horário não integrado foi informado sem fonte.")
-    require(not unavailable_policy.consultations, "Pergunta de horário disparou consulta ao catálogo.")
-    print("[OK] Limitação para informações ainda não integradas.", flush=True)
+    hours = ask("Qual o horário de funcionamento da loja?")
+    require(any(t.name == "consultar_politicas" and t.arguments.get("topico") == "horarios" and t.result.get("ok") for t in hours.consultations), "Horário não foi consultado no manual.")
+    require("18" in hours.content and "13" in hours.content, "Horários esperados não foram apresentados.")
+    print("[OK] Horário fundamentado no manual.", flush=True)
 
 
 def main() -> int:
