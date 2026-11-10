@@ -1,194 +1,178 @@
 # Empório da Música
 
-Protótipo de agente de atendimento para o desafio técnico de AI Engineer da Artefact. O objetivo final é responder em português com a identidade da loja, consultar dados operacionais e políticas e lidar com perguntas fora do escopo.
+Protótipo em Python de um agente de atendimento para o desafio técnico de AI Engineer da Artefact. O objetivo é responder em português com a identidade da loja, consultar dados operacionais e políticas e lidar com perguntas fora do escopo.
 
-## Estado atual — etapa 1
+## Funcionalidades disponíveis
 
-- Chat em Streamlit conectado ao Ollama pelo SDK oficial de Python.
-- Modelo padrão `qwen3:4b-instruct`, executado localmente.
-- Contexto mantido em memória durante a sessão e botão **Nova conversa**.
-- Configuração por ambiente e mensagens de recuperação para serviço indisponível, modelo ausente e timeout.
-- Verificação executável de conexão, resposta em português e chamada real de uma função Python.
+- Chat em Streamlit com Ollama local, histórico em memória por sessão e opção de iniciar nova conversa.
+- Diagnóstico de conexão, resposta em português e execução de uma ferramenta Python pelo modelo.
+- Catálogo SQLite gerado dos CSVs de categorias, produtos e promoções.
+- Consultas Python por texto, categoria, orçamento e disponibilidade, com cálculo exato de descontos.
+- Testes automatizados de importação e regras do catálogo.
 
-**As consultas comerciais ainda não estão implementadas.** O assistente informa essa limitação e recebe instruções para não inventar preços, estoque, pedidos, contatos ou políticas. A ferramenta de soma existe somente no diagnóstico; não representa uma consulta aos dados da loja.
+**A camada de catálogo ainda não está conectada ao chat.** O atendimento informa que as consultas comerciais estão em construção. Pedidos, políticas e ferramentas de atendimento serão adicionados nas próximas entregas.
 
-## Requisitos
+## Requisitos e instalação
 
-- Python **3.12** (ambiente inicial: 3.12.3).
-- [Ollama](https://ollama.com/download) instalado e em execução, com suporte a `tools` e ao parâmetro `think`.
-- Modelo `qwen3:4b-instruct` baixado (aproximadamente 2,5 GB). A primeira instalação exige internet; a inferência usa o serviço local.
-- Memória disponível para o modelo e seu contexto. O desempenho depende do hardware; veja os resultados de validação abaixo.
+- Python **3.12**; dependências diretas e transitivas fixadas em `requirements.txt`.
+- [Ollama](https://ollama.com/download) instalado para executar o chat e o diagnóstico do modelo.
+- Modelo local `qwen3:4b-instruct`, com download de aproximadamente 2,5 GB. O desempenho depende do hardware disponível.
 
-Não é necessária chave de API nem contratação de provedor. Os pesos e o runtime do modelo não são distribuídos no Git.
-
-## Instalação e execução — Windows / PowerShell
-
-Na raiz do repositório:
+Na raiz do repositório, em Windows/PowerShell:
 
 ```powershell
-python --version
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-Os comandos usam diretamente o Python do ambiente virtual, dispensando alterações na política de execução do PowerShell. Copie `.env.example` apenas na primeira configuração, para preservar suas escolhas posteriores.
+Copie `.env.example` apenas na primeira configuração. Os comandos usam o Python do ambiente virtual diretamente, dispensando sua ativação no PowerShell.
 
-Abra o aplicativo Ollama. Como alternativa, mantenha um terminal separado executando:
+### Preparar o catálogo e executar seus testes
 
 ```powershell
-ollama serve
+.\.venv\Scripts\python.exe -m emporio.import_data
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-Com o serviço ativo, baixe o modelo se necessário:
+A importação gera `data/catalog.sqlite3` com 9 categorias, 65 produtos e 25 promoções. O arquivo SQLite é um artefato local ignorado pelo Git; os CSVs necessários estão incluídos em `data/raw/`. A importação e os testes usam apenas a biblioteca padrão de Python e funcionam sem Ollama, GPU ou acesso à rede.
+
+Para usar outros caminhos:
+
+```powershell
+.\.venv\Scripts\python.exe -m emporio.import_data --source-dir data/raw --database data/catalog.sqlite3
+```
+
+### Executar o chat
+
+Abra o aplicativo Ollama ou mantenha outro terminal executando `ollama serve`. Com o serviço ativo:
 
 ```powershell
 ollama pull qwen3:4b-instruct
-```
-
-Valide a integração e inicie a interface:
-
-```powershell
 .\.venv\Scripts\python.exe -m emporio.check_ollama
 .\.venv\Scripts\python.exe -m streamlit run app.py
 ```
 
-Abra [http://localhost:8501](http://localhost:8501). Para encerrar o Streamlit, pressione `Ctrl+C` no terminal.
+Abra [http://localhost:8501](http://localhost:8501). Use `Ctrl+C` no terminal para encerrar o Streamlit. Não é necessária chave de API nem contratação de provedor. A primeira instalação exige internet; a inferência utiliza o serviço local.
 
-Em Linux/macOS, crie o mesmo ambiente com `python3 -m venv .venv`, use `.venv/bin/python` e copie a configuração com `cp .env.example .env`.
+Em Linux/macOS, crie o ambiente com `python3 -m venv .venv`, use `.venv/bin/python` e copie a configuração com `cp .env.example .env`.
 
-### Configuração
+### Configuração do modelo
 
 | Variável | Padrão | Finalidade |
 | --- | --- | --- |
-| `OLLAMA_HOST` | `http://localhost:11434` | URL HTTP do Ollama nesta máquina. |
+| `OLLAMA_HOST` | `http://localhost:11434` | URL HTTP do serviço nesta máquina. |
 | `OLLAMA_MODEL` | `qwen3:4b-instruct` | Modelo local a utilizar. |
-| `OLLAMA_TIMEOUT_SECONDS` | `120` | Tempo de espera por requisição ao serviço. |
+| `OLLAMA_TIMEOUT_SECONDS` | `120` | Tempo de espera por requisição. |
 
-Variáveis já definidas no processo têm prioridade sobre `.env`. A aplicação aceita endereços de loopback e rejeita tags de nuvem; não faz fallback para APIs externas. Utilize somente modelos locais, inclusive se criar aliases no Ollama. O adaptador verifica a disponibilidade do modelo antes do atendimento. As requisições usam temperatura 0,7, `top_p=0.8`, contexto de 4.096 tokens, limite de 1.024 tokens de geração e `think=False`. Uma resposta interrompida pelo limite é tratada como erro, sem gravar conteúdo parcial.
+Variáveis do processo têm prioridade sobre `.env`. A aplicação aceita endereços de loopback, rejeita tags de nuvem e não faz fallback para provedores externos. Utilize somente modelos locais, inclusive ao criar aliases no Ollama.
 
-O plano inicial partiu do `qwen3:4b` já instalado. Seus metadados identificaram a variante **Thinking-2507**, que iniciou raciocínio mesmo com `think=False`; com `think=True`, houve estouro do limite de 2.048 tokens no diagnóstico completo. Por isso, o padrão inicial passou a ser a variante **Instruct** de mesmo porte. Essa escolha prioriza uma resposta direta e uma validação de ferramentas viável para o protótipo. Veja a [variante utilizada](https://ollama.com/library/qwen3:4b-instruct). A qualidade comercial será avaliada nas próximas etapas.
+O adaptador usa `think=False`, temperatura 0,7, `top_p=0.8`, contexto de 4.096 tokens e limite de 1.024 tokens de geração. Esses parâmetros foram validados com a variante Instruct; trocar o modelo exige repetir o diagnóstico e pode exigir ajustes no adaptador.
 
-Os parâmetros desta versão foram validados com a variante Instruct. Trocar `OLLAMA_MODEL` exige repetir o diagnóstico e pode exigir ajustes no adaptador, especialmente para modelos com raciocínio obrigatório.
-
-### Recuperação de problemas
-
-| Situação | Como resolver |
+| Problema | Recuperação |
 | --- | --- |
-| Não conecta ao serviço | Abra o Ollama ou execute `ollama serve`; confira `OLLAMA_HOST`. |
-| Modelo não encontrado | Execute `ollama pull qwen3:4b-instruct`, ou baixe o modelo configurado em `OLLAMA_MODEL`. |
-| Tempo de espera excedido | Aguarde o carregamento inicial, tente novamente ou aumente `OLLAMA_TIMEOUT_SECONDS`. |
-| Modelo sem ferramentas | Use um modelo local com suporte a chamadas de funções e repita o diagnóstico. |
-| Porta já ocupada ao iniciar Ollama | Verifique se o aplicativo já está em execução; não é necessário iniciar um segundo servidor. |
+| Serviço indisponível | Abra o Ollama ou execute `ollama serve`; confira `OLLAMA_HOST`. |
+| Modelo ausente | Execute `ollama pull qwen3:4b-instruct` ou baixe o modelo configurado. |
+| Timeout | Aguarde o carregamento inicial, tente novamente ou aumente `OLLAMA_TIMEOUT_SECONDS`. |
+| Geração interrompida pelo limite | Inicie nova conversa e tente uma pergunta mais curta. |
+| Catálogo ausente | Execute `python -m emporio.import_data` no ambiente do projeto. |
+| CSV inválido | Corrija o arquivo e a linha indicados pelo importador; os registros anteriores são preservados. |
 
-No chat, uma falha não é gravada como resposta do agente nem adicionada ao histórico. A mensagem pode ser reenviada após a correção.
+Mensagens cuja geração falha não são adicionadas ao histórico do chat. Corrigido o problema, a mensagem pode ser reenviada.
+
+## Consultas e regras do catálogo
+
+Exemplo em Python, depois da importação:
+
+```python
+from emporio.catalog import Catalog
+
+catalog = Catalog()
+categories = catalog.list_categories()
+products = catalog.search_products(category_id=5, max_price_brl="1000.00", limit=5)
+for product in products:
+    print(product.name, product.price_brl, product.effective_price_brl)
+
+product = catalog.get_product(121)
+print(product.name, product.effective_price_brl)  # Ohana CK-20 Concert Natural, 439.20
+```
+
+- **Disponibilidade:** apenas `status=active` com estoque positivo. Lançamentos e descontinuados não aparecem na busca padrão, mesmo com estoque. `get_product()` também retorna indisponíveis para permitir explicar seu status; `available_only=False` permite incluí-los nas buscas.
+- **Busca textual:** todos os termos devem aparecer no conjunto nome, descrição e categoria, desconsiderando acentos e maiúsculas. Não há expansão de sinônimos nem busca semântica. Os parâmetros são separados do SQL; caracteres como `%` são tratados literalmente.
+- **Preços:** valores de origem são convertidos com `Decimal` e armazenados como centavos inteiros. O desconto percentual usa aritmética inteira, com arredondamento de meio centavo para cima. As propriedades em reais retornam `Decimal`.
+- **Promoções:** somente `is_active=1` afeta o preço. Promoções inativas são preservadas na base. Mais de uma promoção ativa para o mesmo produto impede a importação, evitando escolher ou acumular descontos sem uma regra definida. A fonte atual não apresenta esse conflito.
+- **Orçamento:** o limite é inclusivo e usa o preço após a promoção ativa. Informe reais como texto com ponto decimal ou `Decimal`, sem frações de centavo. Os resultados são ordenados por preço efetivo crescente e, em empate, por ID; o limite padrão é 10.
+- **Atualização:** cada importação substitui integralmente o snapshot das três tabelas em uma transação. IDs duplicados, referências inválidas e erros de conteúdo impedem a atualização. Consultas abrem o banco em modo somente leitura.
+
+O importador valida campos obrigatórios, inteiros, preços, status, datas, especificações JSON e integridade entre tabelas. Os descontos desta camada contemplam apenas as promoções cadastradas; PIX, parcelamento e demais regras de pagamento ainda não foram implementados. O preço de um item indisponível não representa uma oferta de venda.
 
 ## Decisões técnicas
 
-| Decisão | Justificativa e consequência |
+| Escolha | Justificativa |
 | --- | --- |
-| Python como linguagem principal | Restrição obrigatória do desafio; interface, integração e futuras ferramentas ficam na mesma linguagem. |
-| Ollama local | Atende ao orçamento gratuito e mantém o conteúdo das conversas no ambiente local. Exige que o avaliador instale o runtime e baixe o modelo. |
-| `qwen3:4b-instruct` | Mantém o porte de 4B com suporte a ferramentas. Escolhido após a variante Thinking instalada exceder o limite de geração na validação. |
-| SDK oficial direto | Expõe o fluxo de mensagens e ferramentas sem acrescentar um framework de orquestração. Facilita explicar e testar as decisões do agente. |
-| Streamlit | Permite demonstrar um chat em Python rapidamente. A camada de interface fica separada da integração e do comportamento do agente. |
-| Histórico na sessão | Suporta continuidade de conversa sem persistir mensagens em banco ou arquivo. Nova conversa limpa o histórico; recarregar a página pode criar outra sessão. |
-| Consultas comerciais em etapa posterior | Primeiro validamos a integração. Preços e regras serão fundamentados nas fontes fornecidas quando as ferramentas estiverem prontas. |
+| Python | Linguagem principal exigida pelo desafio. |
+| Ollama local e `qwen3:4b-instruct` | Atendem ao orçamento gratuito e permitem inferência local. A variante Instruct foi escolhida após a variante Thinking-2507 exceder o limite de geração no diagnóstico. A execução exige instalar o runtime e baixar os pesos. |
+| SDK oficial direto | Mantém explícito o fluxo de mensagens e ferramentas, com poucas dependências de orquestração. |
+| Streamlit e histórico por sessão | Permitem demonstrar conversas em Python sem implementar persistência de mensagens nesta versão. |
+| SQLite gerado dos CSVs | Preserva relações e permite consultas parametrizadas sem servidor ou dependência de banco adicional. Os CSVs permanecem como fonte reproduzível. |
+| Preços calculados em Python | Evitam coerção monetária para ponto flutuante. Após os filtros SQL de texto, categoria e disponibilidade, preço, ordenação e limite são aplicados em Python; essa abordagem é adequada ao snapshot de 65 produtos. |
+| Biblioteca padrão para dados e testes | `csv`, `sqlite3`, `Decimal` e `unittest` atendem ao recorte atual sem novas dependências. |
 
-Referências: [SDK Python do Ollama](https://github.com/ollama/ollama-python), [chamadas de ferramentas](https://docs.ollama.com/capabilities/tool-calling), [Qwen3 no Ollama](https://ollama.com/library/qwen3), [Streamlit](https://docs.streamlit.io/).
+Referências: [SDK Python do Ollama](https://github.com/ollama/ollama-python), [chamadas de ferramentas](https://docs.ollama.com/capabilities/tool-calling), [modelo utilizado](https://ollama.com/library/qwen3:4b-instruct) e [Streamlit](https://docs.streamlit.io/).
 
-### Organização
+## Organização e fontes
 
 ```text
-app.py                    Interface Streamlit e estado da sessão
+app.py                    Interface Streamlit
 emporio/
-  config.py               Leitura e validação da configuração
-  llm.py                  Adaptador do SDK e tradução de erros
   agent.py                Persona e comportamento inicial
+  config.py               Configuração do modelo
+  llm.py                  Adaptador do Ollama e tratamento de erros
   check_ollama.py          Diagnóstico real do modelo e de ferramenta
-.env.example              Configuração de exemplo
-requirements.txt          Dependências com versões fixadas
+  database.py              Esquema SQLite, conexão e conversão monetária
+  import_data.py           Importação e validação dos CSVs
+  catalog.py               Consultas e regras do catálogo
+data/raw/                 CSVs de catálogo fornecidos no desafio
+tests/test_catalog.py     Testes de dados e regras de negócio
 ```
 
-## Fontes fornecidas no desafio
+`data/raw/categories.csv`, `products.csv` e `promotions.csv` são cópias dos arquivos fornecidos, com os nomes simplificados e o conteúdo original preservado. Não são carregados dados de clientes ou pedidos nesta entrega.
 
-Inventário obtido pela leitura dos arquivos originais. Eles ainda não foram copiados para este repositório nem são carregados pela aplicação nesta etapa.
-
-| Fonte | Quantidade | Uso previsto |
+| Fonte do desafio | Quantidade | Situação |
 | --- | ---: | --- |
-| `categories.csv` | 9 categorias | Classificação do catálogo. |
-| `products.csv` | 65 produtos | Preços, descrição, estoque, status e especificações. |
-| `promotions.csv` | 25 promoções | Descontos e indicação de atividade; 4 estão ativas. |
-| `customers.csv` | 50 clientes | Associação com pedidos, com exposição mínima de dados pessoais. |
-| `orders.csv` | 20 pedidos | Status, pagamento, rastreio e previsão de entrega. |
-| `order_items.csv` | 22 itens | Associação entre pedidos e produtos. |
-| `políticas_da_loja.pdf` | 8 páginas | Políticas e procedimentos, versão 2.1 de junho de 2025. |
+| Categorias | 9 | Incluídas e importadas. |
+| Produtos | 65 | Incluídos e importados. |
+| Promoções | 25, sendo 4 ativas | Incluídas e importadas. |
+| Clientes | 50 | Fora da camada atual. |
+| Pedidos / itens de pedidos | 20 / 22 | Fora da camada atual. |
+| Manual de políticas | 8 páginas, versão 2.1 de junho de 2025 | Recuperação ainda não implementada. |
 
-Os nomes dos CSVs originais incluem o prefixo `desafio_tecnico_ai_eng - `. Não foram encontrados IDs duplicados nas cinco tabelas com chave própria nem referências órfãs entre tabelas. Há campos vazios de rastreio, previsão de entrega e observações. O catálogo inclui dois produtos descontinuados, um em lançamento e dois com estoque zero. Datas de pedidos vão de 2025-10-15 a 2026-03-22; o conteúdo é uma fotografia fornecida pelo exercício, não uma integração com uma loja real.
+Os dados representam um snapshot do exercício, sem sincronização com uma operação real. Textos e especificações foram preservados; há inconsistências descritivas na fonte, como o produto 140 citar marcas e materiais diferentes entre nome, descrição e especificações. Elas não são corrigidas automaticamente.
 
-### Ambiguidades a tratar na próxima etapa
+O manual também contém ambiguidades que precisarão de interpretação documentada na implementação das políticas: dois números de WhatsApp, grafias diferentes do e-mail, mínimos de parcelamento divergentes e ausência de regra para frete local de exatamente R$ 500.
 
-- **WhatsApp:** capa e dados da empresa trazem `(67) 3341-4444`; a seção 7 indica `(67) 3321-4500` como canal principal.
-- **E-mail:** a capa usa `contato@emporiodamusica.com.br`; a tabela de dados inclui acento no domínio.
-- **Parcelamento:** a tabela geral menciona parcela mínima de R$ 100, enquanto a seção 3.1 estabelece faixas e valores mínimos diferentes.
-- **Frete local de exatamente R$ 500:** o texto distingue valores acima e abaixo desse limite e não define a igualdade.
-- **Arrependimento e trocas:** há requisitos e exceções em seções diferentes; não vamos extrapolar sua aplicação quando faltarem informações da compra.
-
-Essas divergências serão resolvidas por interpretação explícita ou encaminhamento para atendimento humano, com a decisão registrada antes da implementação das respectivas respostas. O manual é fonte de conhecimento do protótipo; suas instruções de atendimento não autorizam ações externas pelo assistente de desenvolvimento.
-
-## Validação da etapa 1
-
-O diagnóstico `python -m emporio.check_ollama` verifica o modelo local, pede uma frase em português, exige uma chamada `somar(17, 25)`, executa a função em Python, devolve o resultado ao modelo e verifica se a resposta final contém `42`. Uma falha encerra o comando com código 1. Os tempos são impressos por execução; eles não constituem um benchmark.
-
-Validação em **09/11/2026**, com Python 3.12.3, Ollama 0.40.11, Windows, cerca de 32 GB de RAM e GPU NVIDIA GeForce RTX 3060 Ti com 8 GB de VRAM:
-
-| Verificação | Resultado |
-| --- | --- |
-| Dependências fixadas e `pip check` | Instalação concluída, sem conflitos. O arquivo inclui dependências diretas e transitivas. |
-| Sintaxe, UTF-8 e compilação | Seis arquivos Python verificados. |
-| Diagnóstico real com `qwen3:4b-instruct` | Aprovado: frase em português, chamada correta, execução Python e resposta final com `42`. |
-| Tempo observado no diagnóstico | 4,48 s no total; 1,75 s na saudação e 0,58 s no ciclo da ferramenta. Inclui chamadas locais; uma amostra, sem garantia de desempenho. |
-| Interface com `AppTest` do Streamlit | Carregamento, histórico de múltiplos turnos, isolamento entre sessões, nova conversa, erro e reenvio verificados. |
-| Chat com modelo real via `AppTest` | Nome do cliente recuperado entre turnos; perguntas sobre preço e devolução receberam aviso de consultas em construção. |
-| Serviço indisponível e modelo ausente | Falhas reais convertidas em instruções para iniciar o serviço ou baixar o modelo. |
-| Configuração inválida | Timeout inválido rejeitado; erro de configuração exibido sem traceback na interface. |
-| Servidor da interface | HTTP 200 em `http://127.0.0.1:8501`. |
-
-Os testes de erro/reenvio e isolamento da interface usaram respostas controladas para verificar o estado da sessão; o diagnóstico de ferramenta e as conversas indicadas como reais utilizaram o modelo local. Não foi adicionada uma suíte de testes de negócio nesta etapa. **A inspeção visual em navegador permanece pendente**, pois não havia navegador conectado disponível no ambiente de execução do assistente.
-
-## Limitações e próximas etapas
-
-- Sem leitura dos CSVs, recuperação do PDF ou ferramentas comerciais. As decisões de armazenamento e retrieval serão tomadas na etapa 2.
-- A persona usa um prompt inicial com restrições explícitas. Isso não é uma garantia contra alucinações ou prompt injection; a fundamentação em ferramentas e a avaliação adversarial ainda estão pendentes.
-- Histórico sem persistência e sem truncamento ou resumo automático: conversas longas podem exceder o contexto do modelo. Use **Nova conversa** para reiniciar.
-- Sem autenticação, consultas a pedidos, registro de reclamações ou integração com WhatsApp. O protótipo é executado localmente.
-- A ferramenta aritmética valida a mecânica de function calling, não a qualidade do atendimento ou a seleção entre várias ferramentas.
-- Testes automatizados das regras de negócio e avaliação de respostas entram com as funcionalidades comerciais. Nesta etapa usamos diagnóstico real e verificação da interface.
-- As 3 a 5 conversas finais de exemplo serão produzidas com o agente comercial funcionando. As verificações técnicas iniciais não serão apresentadas como exemplos finais do desafio.
-
-Com mais tempo: avaliar modelos e estratégias de recuperação, ampliar casos adversariais, implementar identificação adequada para consultas de pedidos e medir qualidade, latência e rastreabilidade das respostas.
-
-## Workflow e uso de IA
-
-Foi utilizado **Codex** para ler o enunciado e as fontes, discutir alternativas, planejar etapas, implementar a base inicial e auxiliar na validação. A pessoa candidata participou das escolhas: execução gratuita local com Ollama, interface Streamlit, SDK direto e desenvolvimento em pequenas entregas. O código e as justificativas devem ser revisados e compreendidos pela pessoa candidata antes de cada commit.
-
-O README será atualizado em cada etapa com as decisões efetivamente tomadas, os resultados e as limitações. Os commits ficam a cargo da pessoa candidata, preservando progresso real.
-
-## Entregáveis do exercício
-
-- [ ] Repositório público no GitHub com histórico incremental.
-- [ ] Agente com consultas aos dados e às políticas, persona e tratamento de perguntas fora de escopo.
-- [ ] README final com execução, justificativas, limitações e declaração do uso de IA.
-- [ ] Entre 3 e 5 conversas de exemplo, incluindo uma situação não trivial.
-
-Após revisar esta primeira etapa:
+## Verificação
 
 ```powershell
-git status --short
-git add .
-git diff --cached --stat
-git diff --cached
-git commit -m "chore: estrutura inicial e integração local com Ollama"
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-Antes da entrega, confira a data e o horário informados no e-mail do processo seletivo. O enunciado pede que o repositório não seja alterado após esse prazo.
+A suíte contém 23 testes, cobrindo importação do snapshot, reimportação, integridade referencial, rollback, disponibilidade, promoções, arredondamento, limite de orçamento, busca textual, consultas parametrizadas e leitura sem escrita. Os testes usam bancos e variações dos CSVs em diretórios temporários; não modificam as fontes versionadas nem exigem LLM.
+
+O comando `python -m emporio.check_ollama` verifica separadamente a integração real com o modelo: frase em português, chamada `somar(17, 25)`, execução Python e uso do resultado `42` na resposta final. Ele não avalia a qualidade comercial do agente nem a seleção entre ferramentas de atendimento.
+
+## Limitações e continuidade
+
+- O catálogo está disponível pela API Python; a integração das consultas ao chat é a próxima entrega.
+- Recuperação de políticas, consultas a pedidos e exemplos finais de atendimento ainda estão pendentes.
+- As restrições do prompt não garantem ausência de alucinações ou resistência a prompt injection; a avaliação comercial e adversarial será ampliada com as ferramentas.
+- O histórico não tem persistência, truncamento ou resumo automático. Conversas longas podem exceder o contexto do modelo.
+- Não há autenticação, registro de reclamações ou integração com WhatsApp. O aplicativo é um protótipo local.
+
+Com mais tempo: comparar modelos, medir qualidade e latência em cenários representativos, ampliar recuperação e avaliação e implementar identificação adequada para consultas de pedidos.
+
+## Uso de IA
+
+Foi utilizado **Codex** para análise das fontes, discussão de alternativas, implementação e auxílio na validação. As escolhas de execução local gratuita, Streamlit, SDK direto, SQLite e desenvolvimento em entregas incrementais foram discutidas com a pessoa candidata. As alterações são revisadas e commitadas pela pessoa candidata.
+
+A entrega final deve conter um repositório público com histórico incremental, este README atualizado e entre 3 e 5 conversas de exemplo, incluindo um cenário não trivial. Os exemplos serão produzidos com as ferramentas comerciais funcionando.
