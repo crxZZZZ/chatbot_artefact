@@ -52,7 +52,9 @@ def verify(agent: ChatAgent) -> None:
     print("[OK] Preço original, desconto e preço final.", flush=True)
 
     unavailable = ask("Tem Giannini GF-3D em estoque?")
-    require(any(term in normalize_text(unavailable.content) for term in ("esgotad", "sem estoque", "indisponivel")), "Indisponibilidade não foi informada.")
+    require(any(term in normalize_text(unavailable.content) for term in (
+        "esgotad", "sem estoque", "indisponivel", "nao esta em estoque", "estoque zero", "disponibilidade zero",
+    )), "Indisponibilidade não foi informada.")
     alternatives = [p for t in unavailable.consultations if t.result.get("ok") for p in t.result.get("alternativas", [])]
     require(bool(alternatives) and all(p["disponivel"] for p in alternatives), "Faltaram alternativas realmente disponíveis.")
     require(any(p["nome"] in unavailable.content for p in alternatives), "Nenhuma alternativa consultada foi apresentada.")

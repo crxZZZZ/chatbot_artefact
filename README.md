@@ -21,7 +21,14 @@ Protótipo em Python de um agente de atendimento para o desafio técnico de AI E
 - [Ollama](https://ollama.com/download) instalado para executar o chat e o diagnóstico do modelo.
 - Modelo local `qwen3:4b-instruct`, com download de aproximadamente 2,5 GB. O desempenho depende do hardware disponível.
 
-Na raiz do repositório, em Windows/PowerShell:
+Clone o repositório com Git (ou baixe e extraia o ZIP pelo GitHub):
+
+```powershell
+git clone https://github.com/crxZZZZ/chatbot_artefact.git
+cd chatbot_artefact
+```
+
+Na raiz do projeto, em Windows/PowerShell, confira se `python --version` indica Python 3.12 antes de criar o ambiente:
 
 ```powershell
 python -m venv .venv
@@ -62,6 +69,8 @@ Abra [http://localhost:8501](http://localhost:8501). Use `Ctrl+C` no terminal pa
 
 Em Linux/macOS, crie o ambiente com `python3 -m venv .venv`, use `.venv/bin/python` e copie a configuração com `cp .env.example .env`.
 
+O ambiente de referência é Windows com Python 3.12.3 e Ollama 0.40.11. Os comandos de Linux/macOS são adaptações e não foram executados nesses sistemas.
+
 ### Configuração do modelo
 
 | Variável | Padrão | Finalidade |
@@ -88,6 +97,8 @@ O adaptador usa `think=False`, temperatura 0,7, `top_p=0.8`, contexto de 8.192 t
 Mensagens cuja geração falha não são adicionadas ao histórico do chat. Corrigido o problema, a mensagem pode ser reenviada.
 
 ## Atendimento e ferramentas
+
+O prompt de sistema em [`emporio/agent.py`](emporio/agent.py) define a persona acolhedora, informal e profissional, a resposta em português e a prioridade das fontes consultadas. Ele orienta esclarecer pedidos ambíguos, recuperar dados antes de afirmar preços ou regras e reconhecer operações indisponíveis. As definições das ferramentas explicam os argumentos aceitos, e os resultados entram no histórico com o papel `tool`. Essa separação ajuda a distinguir instruções de dados; validações em Python complementam o prompt, pois instruções textuais sozinhas não garantem cumprimento das regras.
 
 O modelo recebe as definições das ferramentas e pode solicitá-las antes de responder. O Python valida os argumentos, executa as consultas e devolve os resultados ao modelo. Para perguntas explícitas de política, um roteamento por palavras-chave recupera a seção antes da geração; continuações de devolução também recuperam a regra novamente. Perguntas de pagamento que mencionam códigos de modelo, como `CK-20`, recuperam também o produto por esse código. Esses reconhecedores são heurísticos e não cobrem todas as formas de escrever uma pergunta.
 
@@ -192,6 +203,8 @@ exemplos/                 Quatro transcrições de atendimento com o agente real
 
 Os CSVs em `data/raw/` e `politicas_da_loja.pdf` são cópias dos arquivos fornecidos, com os nomes simplificados e o conteúdo original preservado. Não são carregados dados de clientes ou pedidos nesta entrega.
 
+O exercício permite utilizar um subconjunto dos dados. O escopo prioriza descoberta de instrumentos, preço, estoque, promoções e dúvidas sobre políticas. Consultas de pedidos ficam como evolução, junto à identificação adequada do cliente; o protótipo informa essa limitação no atendimento.
+
 | Fonte do desafio | Quantidade | Situação |
 | --- | ---: | --- |
 | Categorias | 9 | Incluídas e importadas. |
@@ -206,6 +219,8 @@ Os dados representam um snapshot do exercício, sem sincronização com uma oper
 As ambiguidades do manual são preservadas nos trechos e tratadas pelas orientações descritas em **Recuperação e aplicação das políticas**. A decisão já adotada de vender o saldo de descontinuados interpreta a saída do catálogo mencionada na seção 7.3 como saída de linha, preservando o estoque disponível.
 
 ## Verificação
+
+A instalação foi verificada em uma cópia contendo somente os arquivos versionados, com ambiente virtual novo e as dependências de `requirements.txt`. Nesse ambiente, `pip check` não apontou conflitos, a importação recriou o catálogo e os **80 testes automatizados passaram**. Os três diagnósticos com o Ollama local (`check_ollama`, `check_agent` e `check_policies`) também concluíram suas verificações, e o servidor Streamlit iniciou e respondeu ao health check HTTP. Isso valida a execução no ambiente de referência; as limitações semânticas observadas nas respostas continuam descritas abaixo.
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
@@ -259,6 +274,6 @@ Com mais tempo: comparar modelos, medir qualidade e latência em cenários repre
 
 ## Uso de IA
 
-Foi utilizado **Codex** para análise das fontes, discussão de alternativas, implementação e auxílio na validação. As escolhas de execução local gratuita, Streamlit, SDK direto, SQLite e desenvolvimento em entregas incrementais foram discutidas com a pessoa candidata. As alterações são revisadas e commitadas pela pessoa candidata.
+Foi utilizado **Codex** para análise das fontes, discussão de alternativas, implementação e auxílio na validação. As escolhas de execução local gratuita, Streamlit, SDK direto, SQLite e desenvolvimento em entregas incrementais foram discutidas com a pessoa candidata. A pessoa candidata acompanha as decisões e revisa as entregas; os commits são feitos por ela ou pelo Codex sob sua autorização.
 
 O Codex também auxiliou na definição dos cenários, na captura das conversas com o agente real e na revisão dos resultados contra as fontes. As respostas publicadas nos exemplos não foram reescritas manualmente. O requisito de 3 a 5 conversas é atendido pelos quatro arquivos em `exemplos/`, incluindo a combinação de promoção com política de pagamento e a devolução em múltiplos turnos.
