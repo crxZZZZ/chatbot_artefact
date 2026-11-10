@@ -8,9 +8,11 @@ Protótipo em Python de um agente de atendimento para o desafio técnico de AI E
 - Diagnóstico de conexão, resposta em português e execução de uma ferramenta Python pelo modelo.
 - Catálogo SQLite gerado dos CSVs de categorias, produtos e promoções.
 - Consultas Python por texto, categoria, orçamento e disponibilidade, com cálculo exato de descontos.
-- Testes automatizados de importação e regras do catálogo.
+- Consultas ao catálogo pelo chat, com chamadas de ferramentas executadas internamente.
+- Apresentação de categorias em pedidos amplos e continuidade para referências como “o segundo produto”.
+- Testes automatizados de dados, orquestração e estado da interface; avaliação separada com o modelo real.
 
-**A camada de catálogo ainda não está conectada ao chat.** O atendimento informa que as consultas comerciais estão em construção. Pedidos, políticas e ferramentas de atendimento serão adicionados nas próximas entregas.
+**Pedidos e políticas ainda não estão integrados.** O agente informa essa limitação para questões como rastreamento, devoluções, horário e formas de pagamento. As consultas atuais são somente de leitura do catálogo fornecido no exercício.
 
 ## Requisitos e instalação
 
@@ -35,7 +37,7 @@ Copie `.env.example` apenas na primeira configuração. Os comandos usam o Pytho
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-A importação gera `data/catalog.sqlite3` com 9 categorias, 65 produtos e 25 promoções. O arquivo SQLite é um artefato local ignorado pelo Git; os CSVs necessários estão incluídos em `data/raw/`. A importação e os testes usam apenas a biblioteca padrão de Python e funcionam sem Ollama, GPU ou acesso à rede.
+A importação gera `data/catalog.sqlite3` com 9 categorias, 65 produtos e 25 promoções. O arquivo SQLite é um artefato local ignorado pelo Git; os CSVs necessários estão incluídos em `data/raw/`. A camada de dados usa apenas a biblioteca padrão. A suíte completa utiliza as dependências já instaladas, incluindo SDK e Streamlit, com respostas controladas do modelo; não exige servidor Ollama, GPU ou acesso à rede.
 
 Para usar outros caminhos:
 
@@ -67,7 +69,7 @@ Em Linux/macOS, crie o ambiente com `python3 -m venv .venv`, use `.venv/bin/pyth
 
 Variáveis do processo têm prioridade sobre `.env`. A aplicação aceita endereços de loopback, rejeita tags de nuvem e não faz fallback para provedores externos. Utilize somente modelos locais, inclusive ao criar aliases no Ollama.
 
-O adaptador usa `think=False`, temperatura 0,7, `top_p=0.8`, contexto de 4.096 tokens e limite de 1.024 tokens de geração. Esses parâmetros foram validados com a variante Instruct; trocar o modelo exige repetir o diagnóstico e pode exigir ajustes no adaptador.
+O adaptador usa `think=False`, temperatura 0,7, `top_p=0.8`, contexto de 8.192 tokens e limite de 1.024 tokens de geração. O contexto acomoda definições de ferramentas, resultados e histórico técnico. Esses parâmetros foram avaliados com a variante Instruct; trocar o modelo exige repetir os diagnósticos e pode exigir ajustes no adaptador.
 
 | Problema | Recuperação |
 | --- | --- |
@@ -76,9 +78,30 @@ O adaptador usa `think=False`, temperatura 0,7, `top_p=0.8`, contexto de 4.096 t
 | Timeout | Aguarde o carregamento inicial, tente novamente ou aumente `OLLAMA_TIMEOUT_SECONDS`. |
 | Geração interrompida pelo limite | Inicie nova conversa e tente uma pergunta mais curta. |
 | Catálogo ausente | Execute `python -m emporio.import_data` no ambiente do projeto. |
+| Limite de tentativas de consulta | Reformule a pergunta ou informe o nome/modelo desejado. |
 | CSV inválido | Corrija o arquivo e a linha indicados pelo importador; os registros anteriores são preservados. |
 
 Mensagens cuja geração falha não são adicionadas ao histórico do chat. Corrigido o problema, a mensagem pode ser reenviada.
+
+## Atendimento e ferramentas
+
+O modelo recebe as definições das ferramentas e pode solicitá-las antes de responder. O Python valida os argumentos, executa as consultas e devolve os resultados ao modelo. Há no máximo quatro rodadas de execução e oito chamadas por turno. Ações desconhecidas e argumentos inválidos geram retornos de erro, permitindo uma correção dentro desse limite.
+
+| Ferramenta | Comportamento |
+| --- | --- |
+| `listar_categorias` | Retorna nomes e IDs das categorias. Pedidos amplos recebem as categorias e uma pergunta de preferência ou orçamento. |
+| `buscar_produtos` | Combina termos, categoria, orçamento e disponibilidade, retornando até cinco resultados. Para um único produto indisponível, inclui até três alternativas disponíveis da mesma categoria. |
+| `consultar_produto` | Retorna preço, estoque, status, descrição e especificações por um ID já consultado ou explicitamente informado pelo cliente. Também inclui alternativas se o produto estiver indisponível. |
+
+O modelo não gera SQL nem realiza compras, reservas ou alterações de estoque. IDs não obtidos em consultas nem informados pelo cliente são rejeitados; a ferramenta de detalhes só é oferecida quando há IDs conhecidos na conversa. As alternativas usam a mesma categoria e ordenação por preço, sem garantia de equivalência de características.
+
+O histórico técnico conserva chamadas e resultados para identificar os produtos discutidos. Referências ordinais do primeiro ao quinto item são vinculadas à ordem dos nomes efetivamente apresentados; quando não é possível identificar a opção com segurança, o agente pede esclarecimento. A resposta sobre o item referido exige nova consulta. Nomes abreviados pelo modelo podem impedir esse vínculo.
+
+O prompt orienta novas consultas para preço, estoque e detalhes. Há também uma verificação dos valores escritos como `R$`: eles precisam corresponder a preços ou ao orçamento de consultas bem-sucedidas do turno. Uma resposta sem respaldo é solicitada novamente e, se não puder ser corrigida dentro do limite, o turno termina com erro. Essa barreira não valida toda a semântica da resposta nem todas as formas de escrever valores.
+
+Respostas geradas sem consulta bem-sucedida passam por uma classificação curta de escopo e respaldo no mesmo modelo, com saída JSON restrita. Ela permite conversa breve e explicações de limitações e substitui conhecimentos gerais ou afirmações comerciais sem consulta por um redirecionamento ao atendimento disponível. Essa etapa adiciona uma inferência nesses casos e também está sujeita a erros do classificador; não garante filtragem de todos os pedidos mistos ou adversariais.
+
+A interface apresenta a conversa sem expor chamadas de ferramentas, argumentos, IDs internos ou resultados brutos. O histórico técnico permanece na memória da sessão para sustentar as consultas e referências entre turnos; **Nova conversa** limpa os dois históricos. Para diagnóstico e demonstração técnica, `python -m emporio.check_agent` imprime as chamadas no terminal. Saudações simples recebem uma resposta curta predefinida, sem solicitar nome nem chamar o modelo.
 
 ## Consultas e regras do catálogo
 
@@ -113,6 +136,7 @@ O importador valida campos obrigatórios, inteiros, preços, status, datas, espe
 | Python | Linguagem principal exigida pelo desafio. |
 | Ollama local e `qwen3:4b-instruct` | Atendem ao orçamento gratuito e permitem inferência local. A variante Instruct foi escolhida após a variante Thinking-2507 exceder o limite de geração no diagnóstico. A execução exige instalar o runtime e baixar os pesos. |
 | SDK oficial direto | Mantém explícito o fluxo de mensagens e ferramentas, com poucas dependências de orquestração. |
+| Execução de ferramentas controlada pelo Python | Restringe a execução a funções registradas, valida tipos e IDs e limita repetições. Preços continuam sendo calculados pela camada de catálogo. |
 | Streamlit e histórico por sessão | Permitem demonstrar conversas em Python sem implementar persistência de mensagens nesta versão. |
 | SQLite gerado dos CSVs | Preserva relações e permite consultas parametrizadas sem servidor ou dependência de banco adicional. Os CSVs permanecem como fonte reproduzível. |
 | Preços calculados em Python | Evitam coerção monetária para ponto flutuante. Após os filtros SQL de texto, categoria e disponibilidade, preço, ordenação e limite são aplicados em Python; essa abordagem é adequada ao snapshot de 65 produtos. |
@@ -125,15 +149,17 @@ Referências: [SDK Python do Ollama](https://github.com/ollama/ollama-python), [
 ```text
 app.py                    Interface Streamlit
 emporio/
-  agent.py                Persona e comportamento inicial
+  agent.py                Persona, ciclo de ferramentas e referências entre turnos
+  tools.py                Esquemas, validação e adaptação das consultas para o modelo
   config.py               Configuração do modelo
   llm.py                  Adaptador do Ollama e tratamento de erros
   check_ollama.py          Diagnóstico real do modelo e de ferramenta
+  check_agent.py           Cenários de catálogo com o modelo real
   database.py              Esquema SQLite, conexão e conversão monetária
   import_data.py           Importação e validação dos CSVs
   catalog.py               Consultas e regras do catálogo
 data/raw/                 CSVs de catálogo fornecidos no desafio
-tests/test_catalog.py     Testes de dados e regras de negócio
+tests/                    Testes de dados, agente e interface
 ```
 
 `data/raw/categories.csv`, `products.csv` e `promotions.csv` são cópias dos arquivos fornecidos, com os nomes simplificados e o conteúdo original preservado. Não são carregados dados de clientes ou pedidos nesta entrega.
@@ -157,15 +183,22 @@ O manual também contém ambiguidades que precisarão de interpretação documen
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-A suíte contém 24 testes, cobrindo importação do snapshot, reimportação, integridade referencial, rollback, disponibilidade (incluindo venda do saldo de descontinuados), promoções, arredondamento, limite de orçamento, busca textual, consultas parametrizadas e leitura sem escrita. Os testes usam bancos e variações dos CSVs em diretórios temporários; não modificam as fontes versionadas nem exigem LLM.
+A suíte cobre importação, rollback, disponibilidade, descontos, arredondamento, orçamento, chamadas de ferramentas, rejeição de IDs inventados, limites de execução, atualização de preço entre turnos, referências ordinais e ausência de raciocínio interno no histórico. Os testes da interface verificam que consultas técnicas não são exibidas, que o histórico interno é preservado e que isolamento, limpeza e recuperação após erro funcionam. Os bancos de teste são temporários; o agente usa respostas controladas do SDK e a interface usa `AppTest` do Streamlit.
 
 O comando `python -m emporio.check_ollama` verifica separadamente a integração real com o modelo: frase em português, chamada `somar(17, 25)`, execução Python e uso do resultado `42` na resposta final. Ele não avalia a qualidade comercial do agente nem a seleção entre ferramentas de atendimento.
 
+Com o banco preparado e o Ollama em execução, rode os cenários comerciais:
+
+```powershell
+.\.venv\Scripts\python.exe -m emporio.check_agent
+```
+
+O comando exercita saudação, categorias, violões com orçamento, continuação por posição, promoção, produto esgotado com alternativas, descontinuado com saldo, pergunta fora do escopo e informação ainda não integrada. Imprime respostas e chamadas e retorna código 1 se uma condição verificada falhar. Os valores esperados correspondem ao snapshot incluído no repositório. A avaliação verifica condições específicas; não substitui revisão qualitativa das respostas nem garante que todas as afirmações estejam corretas em outras conversas.
+
 ## Limitações e continuidade
 
-- O catálogo está disponível pela API Python; a integração das consultas ao chat é a próxima entrega.
 - Recuperação de políticas, consultas a pedidos e exemplos finais de atendimento ainda estão pendentes.
-- As restrições do prompt não garantem ausência de alucinações ou resistência a prompt injection; a avaliação comercial e adversarial será ampliada com as ferramentas.
+- As restrições do prompt e a barreira de preços não garantem ausência de alucinações ou resistência a prompt injection. Associações entre nome e preço, afirmações de estoque, interpretação de características e redação ainda dependem do modelo e precisam de avaliação ampliada.
 - O histórico não tem persistência, truncamento ou resumo automático. Conversas longas podem exceder o contexto do modelo.
 - Não há autenticação, registro de reclamações ou integração com WhatsApp. O aplicativo é um protótipo local.
 
